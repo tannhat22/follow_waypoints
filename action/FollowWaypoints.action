@@ -1,0 +1,9 @@
+#goal
+geometry_msgs/PoseArray target_poses
+---
+#result
+bool is_success
+---
+#feedback
+# geometry_msgs/PoseStamped base_position
+geometry_msgs/PoseArray remain_target_poses

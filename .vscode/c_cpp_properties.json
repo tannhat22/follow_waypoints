@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "browse": {
+                "databaseFilename": "${default}",
+                "limitSymbolsToIncludedHeaders": false
+            },
+            "includePath": [
+                "/opt/ros/noetic/include/**",
+                "/home/amr_research/ff_ros1_ws/install/free_fleet/include/**",
+                "/home/amr_research/ff_ros1_ws/install/cyclonedds/include/**",
+                "/home/amr_research/catkin_ws/src/follow_waypoints/include/**",
+                "/home/amr_research/catkin_ws/devel/include/follow_waypoints/**",
+                "/usr/include/**"
+            ],
+            "name": "ROS",
+            "intelliSenseMode": "gcc-x64",
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu11",
+            "cppStandard": "c++14"
+        }
+    ],
+    "version": 4
+}
