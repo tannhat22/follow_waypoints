@@ -9,7 +9,8 @@ import tf2_ros
 from actionlib_msgs.msg import GoalStatus
 from follow_waypoints.msg import FollowWaypointsAction, FollowWaypointsGoal, FollowWaypointsResult, FollowWaypointsFeedback
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal, MoveBaseFeedback
-from geometry_msgs.msg import Pose, PoseArray, Point, Point32
+from std_msgs.msg import Float32
+from geometry_msgs.msg import Pose, PoseArray
 from tf.transformations import euler_from_quaternion
 
 class FollowWaypointsServer():
@@ -29,6 +30,7 @@ class FollowWaypointsServer():
         self.map_frame          = rospy.get_param("~map_frame", "map")
         self.robot_frame        = rospy.get_param("~robot_frame", "base_footprint")
         self.distance_tolerance = rospy.get_param("~distance_tolerance", 3.0)
+        self.max_speed          = rospy.get_param("~max_speed", 0.7)
         self.action_name        = rospy.get_param("~action_name", "/follow_waypoints_server")
         self.find_closest_point = rospy.get_param("~find_closest_point", False)
         self.update_frequency   = rospy.get_param("~update_frequency", 5.0)
@@ -45,12 +47,16 @@ class FollowWaypointsServer():
         self._as.start()
         
         # Publishers, Subcribers:
+        self.speed_limit_publisher = rospy.Publisher("speed_limit_lane", 
+                                                    Float32, queue_size=1, latch=True)
         self.pose_array_publisher = rospy.Publisher("/waypoints", 
                                                     PoseArray, queue_size=1, latch=True)
         
 
     def execute_cb(self, goal: FollowWaypointsGoal):
         poses_array = goal.target_poses.poses
+        obey_speed_limit = list(goal.obey_approach_speed_limit)
+        speed_limit = list(goal.approach_speed_limit)
         if len(poses_array) == 0:
             self._result.is_success = False
             self._as.set_aborted(self._result, "Aborting on goal because it was sent with an empty poses")
@@ -83,7 +89,14 @@ class FollowWaypointsServer():
                 if distances[closest_index] < np.linalg.norm(pose_arr[closest_index+1] - pose_arr[closest_index], axis=0):
                     closest_index += 1
 
-            target_poses_filter = pose_arr[closest_index:]
+            try:
+                target_poses_filter = pose_arr[closest_index:]
+                obey_speed_limit = obey_speed_limit[closest_index:]
+                speed_limit = speed_limit[closest_index:]
+            except:
+                target_poses_filter = pose_arr[-1]
+                obey_speed_limit = obey_speed_limit[-1]
+                speed_limit = speed_limit[-1]
         
         else:
             target_poses_filter = pose_arr
@@ -99,7 +112,7 @@ class FollowWaypointsServer():
             pose.orientation.w = float(point[3])
             waypoints.append(pose)
         
-        self.logwarn(f"Start moving robot through {len(target_poses_filter)} waypoints!")
+        self.logwarn(f"Start moving robot through {len(waypoints)} waypoints!")
 
         is_reach_goal = True
         distance = 10
@@ -112,7 +125,9 @@ class FollowWaypointsServer():
                 return
             
             if is_reach_goal:
-                self.sendMoveBaseGoal(waypoints[0])
+                self.sendMoveBaseGoal(waypoints[0],
+                                      obey_speed_limit[0],
+                                      speed_limit[0])
                 is_reach_goal = False
 
             else:
@@ -143,17 +158,21 @@ class FollowWaypointsServer():
                         is_reach_goal = True
                         distance = 10
                         waypoints.pop(0)
+                        obey_speed_limit.pop(0)
+                        speed_limit.pop(0)
             
-            self.handle_feedback(waypoints)
+            self.handle_feedback(waypoints, obey_speed_limit, speed_limit)
             self.pubWaypointList(waypoints)
             self.rate.sleep()
 
 
-    def handle_feedback(self, waypoints: list):
+    def handle_feedback(self, waypoints: list, obey_speed_limit: list, speed_limit: list):
         # self._feedback.base_position = feedback.base_position
         self._feedback.remain_target_poses.header.frame_id = self.map_frame
         self._feedback.remain_target_poses.header.stamp = rospy.Time.now()
         self._feedback.remain_target_poses.poses = waypoints
+        self._feedback.remain_obey_approach_speed_limit = obey_speed_limit
+        self._feedback.remain_approach_speed_limit = speed_limit
         self._as.publish_feedback(self._feedback)
     
     def get2DPose(self):
@@ -204,8 +223,16 @@ class FollowWaypointsServer():
         return poses
     
 
-    def sendMoveBaseGoal(self, pose: Pose):
+    def sendMoveBaseGoal(self, pose: Pose, obey_speed_limit: bool = False , speed_limit: float = None):
         """Assemble and send a new goal to move_base"""
+        msg_speed = Float32()
+        if obey_speed_limit:
+            msg_speed.data = speed_limit
+            
+        else:
+            msg_speed.data = self.max_speed
+        self.speed_limit_publisher.publish(msg_speed)
+
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = self.map_frame
         goal.target_pose.pose.position = pose.position
