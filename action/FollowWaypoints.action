@@ -1,0 +1,13 @@
+#goal
+geometry_msgs/PoseArray target_poses
+bool[] obey_approach_speed_limit
+float32[] approach_speed_limit
+---
+#result
+bool is_success
+---
+#feedback
+# geometry_msgs/PoseStamped base_position
+geometry_msgs/PoseArray remain_target_poses
+bool[] remain_obey_approach_speed_limit
+float32[] remain_approach_speed_limit
